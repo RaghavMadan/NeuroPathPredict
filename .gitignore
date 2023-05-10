@@ -2,3 +2,8 @@
 *.nii.gz
 *.nii
 *.DS_Store
+
+**.gz
+**.nii.gz
+**.nii
+**.DS_Store
