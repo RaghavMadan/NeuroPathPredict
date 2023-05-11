@@ -9,11 +9,5 @@
 *.ipynb
 *.pem
 *.zip
+*log.txt
 /HC_subfields/subjects/mni/
-
-**.gz
-**.nii.gz
-**.nii
-**.DS_Store
-**.csv
-**.png
