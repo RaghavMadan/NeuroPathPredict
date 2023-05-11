@@ -3,9 +3,14 @@
 *.nii
 *.DS_Store
 *.csv
+*.png
+*.log
+*.sh
+/HC_subfields/subjects/mni/
 
 **.gz
 **.nii.gz
 **.nii
 **.DS_Store
 **.csv
+**.png
