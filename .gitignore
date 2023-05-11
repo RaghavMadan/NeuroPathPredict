@@ -8,6 +8,7 @@
 *.sh
 *.ipynb
 *.pem
+*.zip
 /HC_subfields/subjects/mni/
 
 **.gz
