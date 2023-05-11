@@ -2,8 +2,10 @@
 *.nii.gz
 *.nii
 *.DS_Store
+*.csv
 
 **.gz
 **.nii.gz
 **.nii
 **.DS_Store
+**.csv
