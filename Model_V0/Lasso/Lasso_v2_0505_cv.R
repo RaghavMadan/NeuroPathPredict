@@ -25,18 +25,19 @@ df_x<- df_x[-c(1)]
 summary(df_y)
 
 
-df_x$roi <- as.numeric(factor(df_x$roi))
-df_x$p.no. <- as.numeric(factor(df_x$p.no.))
+df_x$roi <- factor(df_x$roi)
+df_x$p.no. <- factor(df_x$p.no.)
 
 class(df_x$roi)
 
 df <- cbind(df_y,df_x)
 colnames(df)[1] <- "QNP_obs"
 
+df <- cbind(df_y,df_x)
 y <- as.matrix(df[1])
 x <- as.matrix(df[2:978])
 
-class(x[2])
+class(df$)
 class(y)
 
 ####### Run nested cross-validation with parameter tuning ######

@@ -12,7 +12,7 @@ library("MASS")
 getwd()
 setwd("~/Desktop/NeuroPathPredict/Model_V0/")
 df_y<- read.csv("Y_qnp_data_0426.csv")
-df_x<- read.csv("X_cov_roi_mean_val_0426.csv")
+df_x<- read.csv("X_cov_roi_mean_val_0515.csv")
 
 rownames(df_x) <- df_x$rois
 rownames(df_y) <- df_y$UWA.
@@ -20,7 +20,14 @@ rownames(df_y) <- df_y$UWA.
 df_y<- df_y[-c(1)]
 df_x<- df_x[-c(1)]
 
-summary(t(df_y))
+summary((df_x))
+
+# Perform a z-transform on y
+df_xz <- scale(df_x)
+
+# Print the mean and standard deviation of y and y_z
+print(c(mean(y), sd(y)))
+print(c(mean(y_z), sd(y_z)))
 
 # compute each row's mean using mean() function
 rowMeans(df_y["MFG",],na.rm=TRUE)
@@ -74,7 +81,7 @@ x_SB <- x_SB[rep(1,761),]
 
 X <- rbind(x_MFG,x_SMTG,x_IPL,x_AM,x_CA1,x_CA3,x_CA4,x_DG,x_EC,x_SB)
 
-write.csv(X, "X_cov_roi_0428.csv", row.names = TRUE)
+write.csv(X, "X_cov_roi_0515.csv", row.names = TRUE)
 
 df_yt <- t(df_y)
 
@@ -133,7 +140,7 @@ l_EC <- b_EC$x[which.max(b_EC$y)]
 t_ybc$EC <- (t_y$EC ^ l_EC -1)/l_EC
 
 df_ybc <- data.frame(t(t_ybc))
-write.csv(df_ybc, "Y_qnp_data_preproc_0426.csv", row.names = TRUE)
+write.csv(df_ybc, "Y_qnp_data_preproc_0515.csv", row.names = TRUE)
 
 ##Plotting distibutions (raw, log transform, BC transform)
 #MFG
