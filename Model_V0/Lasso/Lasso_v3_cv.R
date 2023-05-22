@@ -14,7 +14,7 @@ library("ggplot2")
 getwd()
 setwd("~/Desktop/NeuroPathPredict/Model_V0/")
 df_y<- read.csv("Y_qnp_data_0428.csv")
-df_x<- read.csv("X_cov_roi_0505.csv")
+df_x<- read.csv("X_cov_roi_0515.csv")
 
 rownames(df_x) <- df_x$rois
 rownames(df_y) <- df_y$X
@@ -34,17 +34,13 @@ df <- cbind(df_y,df_x)
 colnames(df)[1] <- "QNP_obs"
 
 y <- as.matrix(df[,1])
-x <- model.matrix(df[,-1])
-
+x <- as.matrix(df[4:932])
 x_train <- model.matrix( ~ ., df[,-1], ignore.intercept = TRUE)
-
-class(x[2])
-class(y[2])
 
 ####### Run nested cross-validation with parameter tuning ######
 
 # Define cross-validation folds for outer loop (model assessment)
-outer_folds <- createFolds(df$QNP_obs, k = 10)
+outer_folds <- createFolds(df$QNP_obs, k = 5)
 
 # Set up grid of hyperparameters to tune
 lambda_seq <- 10^seq(-2, 2, length.out = 100)
@@ -67,7 +63,8 @@ cv_results <- caret::train(x = x_train,
                            family = "gaussian",
                            tuneLength = 10,
                            verboseIter = TRUE,
-                           allowParallel = TRUE)
+                           allowParallel = TRUE,
+                           trace.it = TRUE)
 
 cv_results
 # View best hyperparameters
@@ -76,61 +73,104 @@ best_lambda <- cv_results$bestTune$lambda
 
 temp_ncv      = coef(cv_results$finalModel, s = best_lambda)
 temp_ncv.data = as.data.frame(summary(temp_ncv))
-temp_ncv.name = row.names(temp_ncv)           
-temp_ncv.name[temp_ncv.data[-1,1]]  
+temp_ncv.name = row.names(temp_ncv)
+pred_coef <- temp_ncv.name[temp_ncv.data[-1,1]]
 
 trellis.par.set(caretTheme())
 plot(cv_results)
-densityplot(cv_results, pch = "|")
 
 # Train final model with best hyperparameters
-final_model <- glmnet(x = as.matrix(df[2:978]),
+final_model <- glmnet(x_train,
                       y = df$QNP_obs,
                       alpha = best_alpha,
                       lambda = best_lambda,
                       family = "gaussian")
 
 print(final_model)
-predict(final_model, newx = x[1:10,], s = "best_lambda")
-predict(final_model, newx = x[761:770,], s = "best_lambda")
+pred_ncv <- predict(final_model, newx = x_train, s = "best_lambda")
 
-# Plot the results
-ggplot(cv_results) +
-  geom_point(aes(x = log(lambda), y = RMSE)) +
-  geom_line(aes(x = log(lambda), y = RMSE)) +
-  facet_wrap(~ alpha, ncol = 3, scales = "free_x") +
-  xlab("Log(lambda)") +
-  ylab("RMSE") +
-  ggtitle("Nested Cross-Validation Results")
+###### Assess results of nested cross-validation with factored regions and participants ######
 
-######################End nested cv###########
-### original CV model ################
+## Plot the predicted values from the nested cross-validation model compared with original values
+par(mfrow = c(1, 1))
+plot(y, pred_ncv, main = "Nested CV", xlab = "Observed", ylab = "Predicted")
+abline(0, 1, col = "red")
 
-cv_model <- cv.glmnet(x_train,y, family = "gaussian", nfolds = 10, alpha=1, trace.it = TRUE, standardize = FALSE)
-print(cv_model)
+## Plot the residuals from the nested cross-validation model compared with original values
+par(mfrow = c(1, 1))
+plot(y, y - pred_ncv, main = "Nested CV", xlab = "Observed", ylab = "Residuals")
+abline(0, 0, col = "red")
 
-best_lambda <- cv_model$lambda.min
-log(best_lambda)
+##Plot distribution  of observed values and prectided values
+par(mfrow = c(1, 1))
+hist(y, main = "Observed", xlab = "QNP", col = "blue")
+hist(pred_ncv, main = "Nested CV", xlab = "QNP", col = "red", add = TRUE)
 
-se_lambda <- cv_model$lambda.1se
-se_lambda
+##Plot boxplot of observed values and prectided values
+par(mfrow = c(1, 2))
+boxplot(y, main = "Observed", xlab = "QNP", col = c("blue"))
+boxplot(pred_ncv, main = "Predicted", xlab = "QNP", col = c("#ff2a00"))
 
-plot(cv_model)
+####### Run nested cross-validation with parameter tuning without factors ######
 
-best_model = glmnet(x_train,y, alpha = 1, lambda=best_lambda, family = "gaussian")
-coef_bm <- as.matrix(coef(best_model))
-predict(best_model, newx = x_train[1:10,], s = "lambda.min")
-predict(best_model, newx = x[761:770,], s = "lambda.min")
+# Set up nested cross-validation using caret
+set.seed(825)
+cv_results_a <- caret::train(x = x,
+                           y = df$QNP_obs,
+                           trControl = outer_control,
+                           tuneGrid = hyper_grid,
+                           method = "glmnet",
+                           family = "gaussian",
+                           tuneLength = 10,
+                           verboseIter = TRUE,
+                           allowParallel = TRUE,
+                           trace.it = TRUE)
 
-model_se = glmnet(x,y, alpha=0.1, lambda=se_lambda, family = "gaussian")
-coef(model_se)
-predict(model_se, newx = x[1:5,], s = "lambda.1se")
+cv_results_a
+# View best hyperparameters
+best_alpha_a <- cv_results_a$bestTune$alpha
+best_lambda_a <- cv_results_a$bestTune$lambda
 
-beta_best_model <- best_model[["beta"]]
+temp_ncv_a      = coef(cv_results_a$finalModel, s = best_lambda_a)
+temp_ncv_a.data = as.data.frame(summary(temp_ncv_a))
+temp_ncv_a.name = row.names(temp_ncv_a)
+pred_coef_a <- temp_ncv_a.name[temp_ncv_a.data[-1,1]]
 
+trellis.par.set(caretTheme())
+plot(cv_results_a)
 
+# Train final model with best hyperparameters
+final_model_a <- glmnet(x,
+                      y = df$QNP_obs,
+                      alpha = best_alpha_a,
+                      lambda = best_lambda_a,
+                      family = "gaussian")
 
-temp      = coef(cv_model, s = "lambda.min")
-temp.data = as.data.frame(summary(temp)) 
-temp.name = row.names(temp)           
-temp.name[temp.data[-1,1]]                
+print(final_model_a)
+pred_ncv_a <- predict(final_model_a, newx = x, s = best_lambda_a)
+
+###### Compare results of nested cross-validation with & without factored regions and participants ######
+
+## Plot the predicted values from the nested cross-validation model compared with original values
+par(mfrow = c(2, 1))
+plot(y, pred_ncv, main = "Nested CV", xlab = "Observed", ylab = "Predicted")
+abline(col = "red")
+plot(y, pred_ncv_a, main = "Nested CV_a", xlab = "Observed", ylab = "Predicted")
+abline(col = "red")
+
+## Plot the residuals from the nested cross-validation model compared with original values
+par(mfrow = c(2, 1))
+plot(y, y - pred_ncv, main = "Nested CV", xlab = "Observed", ylab = "Residuals")
+abline(h = 0, col = "red")
+plot(y, y - pred_ncv_a, main = "Nested CV_a", xlab = "Observed", ylab = "Residuals")
+abline(h = 0, col = "red")
+
+##Plot distribution  of observed values and prectided values
+par(mfrow = c(1, 1))
+hist(y, main = "Observed", xlab = "QNP", col = "blue")
+hist(pred_ncv_a, main = "Nested CV", xlab = "QNP", col = "red", add = TRUE)
+
+##Plot boxplot of observed values and prectided values
+par(mfrow = c(1, 2))
+boxplot(y, main = "Observed", xlab = "QNP", col = c("blue"))
+boxplot(pred_ncv_a, main = "Predicted", xlab = "QNP", col = c("#ff2a00"))
