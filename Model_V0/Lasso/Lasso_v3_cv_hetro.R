@@ -228,4 +228,3 @@ r2_log <- cor(y, pred_ncv)^2
 r2_bc <- cor(y_bc, pred_ncv_bc)^2
 
 ##### BC(y) is very slightly better than log(y) #####
-```
