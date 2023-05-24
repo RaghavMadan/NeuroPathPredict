@@ -141,6 +141,20 @@ colnames(df_bc)[1] <- "QNP_obs"
 y_bc <- df_bc[,1]
 x_bc <- model.matrix( ~ ., df_bc[,-1], ignore.intercept = TRUE)
 
+# Define cross-validation folds for outer loop (model assessment)
+outer_folds <- createFolds(df_bc$QNP_obs, k = 5)
+
+# Set up grid of hyperparameters to tune
+lambda_seq <- 10^seq(-2, 2, length.out = 100)
+alpha_seq <- seq(0, 1, length.out = 11)
+hyper_grid <- expand.grid(alpha = alpha_seq, lambda = lambda_seq)
+
+# Define cross-validation control for inner loop (hyperparameter tuning)
+inner_control <- trainControl(method = "cv", number = 5)
+
+# Define cross-validation control for outer loop (model assessment)
+outer_control <- trainControl(method = "cv", index = outer_folds, savePredictions = TRUE)
+
 # Set up nested cross-validation using caret
 cv_results_bc <- caret::train(x = x_bc,
                            y = df_bc$QNP_obs,
@@ -168,7 +182,7 @@ plot(cv_results_bc)
 
 # Train final model with best hyperparameters
 final_model_bc <- glmnet(x_bc,
-                      y = df$QNP_obs,
+                      y = df_bc$QNP_obs,
                       alpha = best_alpha_bc,
                       lambda = best_lambda_bc,
                       family = "gaussian")
@@ -228,3 +242,15 @@ r2_log <- cor(y, pred_ncv)^2
 r2_bc <- cor(y_bc, pred_ncv_bc)^2
 
 ##### BC(y) is very slightly better than log(y) #####
+
+## iterate over 1st column to make 10 columns of 761 values each for 10 rois ##
+pred_ncv_bc <- as.data.frame(pred_ncv_bc)
+pred_ncv_bc_split <- matrix(0, nrow = 761, ncol = 10)
+for (i in 1:10) {
+  pred_ncv_bc_split[,i] <- pred_ncv_bc[(761*(i-1)+1):(761*i),1]
+}
+rownames(pred_ncv_bc_split) <- rownames(pred_ncv_bc)[1:761]
+colnames(pred_ncv_bc_split) <- c("MFG", "SMTG", "IPL", "AM", "CA1", "CA3","CA4","DG","EC","SB")
+
+## save predicted values to csv ##
+write.csv(t(pred_ncv_bc_split), file = "df_lasso_pred.csv")

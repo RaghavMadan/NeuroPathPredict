@@ -8,11 +8,12 @@ library("mice")
 library("Hmisc")
 library("GeneNet")
 library("MASS")
+library("car")
 
 getwd()
 setwd("~/Desktop/NeuroPathPredict/Model_V0/")
 df_y<- read.csv("Y_qnp_data_0426.csv")
-df_x<- read.csv("X_cov_roi_mean_val_0515.csv")
+df_x<- read.csv("X_cov_roi_0515.csv")
 
 rownames(df_x) <- df_x$rois
 rownames(df_y) <- df_y$UWA.
@@ -20,15 +21,46 @@ rownames(df_y) <- df_y$UWA.
 df_y<- df_y[-c(1)]
 df_x<- df_x[-c(1)]
 
-summary((df_x))
+######## Process X ########
+# z-score standardization for columns 3:931
+df_x_scaled <- df_x
+df_x_scaled[,3:931] <- scale(df_x[,3:931])
 
-# Perform a z-transform on y
-df_xz <- scale(df_x)
+# check standard variation and mean of each column and store in data frame
+X <- data.frame(colnames(df_x_scaled[,3:931]))
+X$mean <- apply(df_x_scaled[,3:931], 2, mean)
+X$sd <- apply(df_x_scaled[,3:931], 2, sd)
+X$var <- apply(df_x_scaled[,3:931], 2, var)
 
-# Print the mean and standard deviation of y and y_z
-print(c(mean(y), sd(y)))
-print(c(mean(y_z), sd(y_z)))
 
+write.csv(df_x_scaled, "X_cov_roi_0524.csv", row.names = TRUE)
+
+
+#x_MFG <- cbind(df_x[1,])
+#x_MFG <- x_MFG[rep(1,761),]
+#x_SMTG <- cbind(df_x[2,])
+#x_SMTG <- x_SMTG[rep(1,761),]
+#x_IPL <- cbind(df_x[3,])
+#x_IPL <- x_IPL[rep(1,761),]
+# x_AM <- cbind(df_x[4,])
+# x_AM <- x_AM[rep(1,761),]
+# x_CA1 <- cbind(df_x[5,])
+# x_CA1 <- x_CA1[rep(1,761),]
+# x_CA3 <- cbind(df_x[6,])
+# x_CA3 <- x_CA3[rep(1,761),]
+# x_CA4 <- cbind(df_x[7,])
+# x_CA4 <- x_CA4[rep(1,761),]
+# x_DG <- cbind(df_x[8,])
+# x_DG <- x_DG[rep(1,761),]
+# x_EC <- cbind(df_x[9,])
+# x_EC <- x_EC[rep(1,761),]
+# x_SB <- cbind(df_x[10,])
+# x_SB <- x_SB[rep(1,761),]
+# X <- rbind(x_MFG,x_SMTG,x_IPL,x_AM,x_CA1,x_CA3,x_CA4,x_DG,x_EC,x_SB)
+
+
+
+####### Process Y #######
 # compute each row's mean using mean() function
 rowMeans(df_y["MFG",],na.rm=TRUE)
 m <- c()
@@ -54,47 +86,15 @@ df_y["DG",][is.na(df_y["DG",])] <- a["DG",]
 df_y["SB",][is.na(df_y["SB",])] <- a["SB",]
 df_y["EC",][is.na(df_y["EC",])] <- a["EC",]
 
-summary(t(df_y))
-##############################
-#df_xt <- t(df_x)
-
-x_MFG <- cbind(df_x[1,])
-x_MFG <- x_MFG[rep(1,761),]
-x_SMTG <- cbind(df_x[2,])
-x_SMTG <- x_SMTG[rep(1,761),]
-x_IPL <- cbind(df_x[3,])
-x_IPL <- x_IPL[rep(1,761),]
-x_AM <- cbind(df_x[4,])
-x_AM <- x_AM[rep(1,761),]
-x_CA1 <- cbind(df_x[5,])
-x_CA1 <- x_CA1[rep(1,761),]
-x_CA3 <- cbind(df_x[6,])
-x_CA3 <- x_CA3[rep(1,761),]
-x_CA4 <- cbind(df_x[7,])
-x_CA4 <- x_CA4[rep(1,761),]
-x_DG <- cbind(df_x[8,])
-x_DG <- x_DG[rep(1,761),]
-x_EC <- cbind(df_x[9,])
-x_EC <- x_EC[rep(1,761),]
-x_SB <- cbind(df_x[10,])
-x_SB <- x_SB[rep(1,761),]
-
-X <- rbind(x_MFG,x_SMTG,x_IPL,x_AM,x_CA1,x_CA3,x_CA4,x_DG,x_EC,x_SB)
-
-write.csv(X, "X_cov_roi_0515.csv", row.names = TRUE)
-
-df_yt <- t(df_y)
-
-y <- cbind(df_y[1,],df_y[2,],df_y[3,],df_y[4,],df_y[5,],df_y[6,],df_y[7,],df_y[8,],df_y[9,],df_y[10,])
-Y <- as.data.frame(t(y))
-
-write.csv(Y, "Y_qnp_data_0428.csv")
-
-##############################
+summary(Y)
+# calculate mean, sd, var for Y ##
+Y_sum <- data.frame(colnames(Y))
+Y_sum$mean <- apply(Y, 2, mean)
+Y_sum$sd <- apply(Y, 2, sd)
+Y_sum$var <- apply(Y, 2, var)
 
 
 t_y <- data.frame(t(df_y))
-t_ylog <- log(t_y)
 t_ybc <- t_y
 
 ##Calculating lambda values for box-cox transformation
@@ -140,7 +140,12 @@ l_EC <- b_EC$x[which.max(b_EC$y)]
 t_ybc$EC <- (t_y$EC ^ l_EC -1)/l_EC
 
 df_ybc <- data.frame(t(t_ybc))
-write.csv(df_ybc, "Y_qnp_data_preproc_0515.csv", row.names = TRUE)
+
+y <- cbind(df_ybc[1,],df_ybc[2,],df_ybc[3,],df_ybc[4,],
+df_ybc[5,],df_ybc[6,],df_ybc[7,],df_ybc[8,],df_ybc[9,],df_ybc[10,])
+Y <- as.data.frame(t(y))
+
+write.csv(Y, "Y_qnp_data_0524.csv")
 
 ##Plotting distibutions (raw, log transform, BC transform)
 #MFG
