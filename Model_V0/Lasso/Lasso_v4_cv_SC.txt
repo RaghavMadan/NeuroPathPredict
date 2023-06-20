@@ -1,0 +1,175 @@
+#install.packages("glmnet")
+#install.packages('Rcpp')
+#install.packages("latticeExtra")
+
+# Y: quantitative tau pathology value calculated over a region (Raghav email, 230518)
+
+#----------------------------------------------------
+# [1] Data prep
+#----------------------------------------------------
+
+rm(list=ls())
+
+# let's load some of these only, for now.
+  #library(Rcpp)	# ver 1.0.10    # you don't need to load this. It is masked with others.
+  library(glmnet)	# ver 4.1-7	# this also loads Matrix too.
+  #library(mice)
+  #library(Hmisc)
+  #library(dplyr)	# ver 1.1.1 
+  library(caret)	# ver 6.0-94 	# this also loads ggplot2 & lattice
+  #library(Matrix)	# ver 1.5-4
+  #library(ggplot2)	# ver 3.4.2
+
+# read data  # replace read.csv("Y_qnp_data_0524.csv") & read.csv("X_cov_roi_0524.csv")
+             # by      reading in RData directly
+  load("D:\\UWHMC\\Works\\Brain mapping - Raghav\\GitHub Raghav\\SC code\\X_cov_roi_0524.rdata")
+  load("D:\\UWHMC\\Works\\Brain mapping - Raghav\\GitHub Raghav\\SC code\\Y_qnp_data_0524.rdata")
+
+  df_x = X_cov_roi_0524
+  df_y = Y_qnp_data_0524
+  dim(df_y); dim(df_x)	# 7610 x 2, 933 
+
+# column check
+  names(df_x)[1:20]
+		#  [1] "roi"              "p.no."            "hc"               "bz_AC_bz_r1"     
+		#  [5] "bz_AC_bz_r2"      "bz_AC_bz_r5"      "bz_AC_bz_r7"      "bz_AC_bz_r10"    
+		#  [9] "bz_AC_bz_r12.5"   "bz_AC_bz_r15"     "bz_AC_bz_r20"     "bz_AF_L_bz_r1"   
+		# [13] "bz_AF_L_bz_r2"    "bz_AF_L_bz_r5"    "bz_AF_L_bz_r7"    "bz_AF_L_bz_r10"  
+		# [17] "bz_AF_L_bz_r12.5" "bz_AF_L_bz_r15"   "bz_AF_L_bz_r20"   "bz_AR_L_bz_r10"  
+
+  names(df_y)	#  [1] "mfg"  "Col2"	# mfg is id number, Col2 is actual Y value 
+
+  length(unique(df_y[,1]))		# 7610 -- all unique: this is not participant ID
+  length(unique(df_x[,'roi']))		# 7610 -- ?????
+  length(unique(df_x[,'p.no.']))	#   10
+  length(unique(df_x[,'hc']))		#  761
+
+  table(df_x[,'p.no.'], exclude=NULL)	# ??
+
+		  AM  CA1  CA3  CA4   DG   EC  IPL  MFG   SB SMTG 
+		 761  761  761  761  761  761  761  761  761  761 
+
+  table(df_x[,'hc'], exclude=NULL)	# ??
+		# 10 of 1 ~ 761
+
+
+# prepare group variables for predictors
+  df_x$roi   <- as.factor(df_x$roi )  ; class(df_x$roi )   # factor
+  df_x$p.no. <- as.factor(df_x$p.no.) ; class(df_x$p.no.)  # factor
+
+
+# put x and y together
+  df <- data.frame(QNP_obs = df_y[,-1], df_x)	# put x and y together, excluding their first columns, skipping creating x and y
+	# check column names:
+	head(names(df))				# [1] "QNP_obs"  "roi" "p.no." "hc" "bz_AC_bz_r1" "bz_AC_bz_r2"
+
+
+# define standardize()
+
+  standardize = function(x){
+   	   tm = mean(x, na.rm=T)
+	   ts = sd(x, na.rm=T)
+	   temp = (x-tm)/ts
+	   return(temp)
+  }
+
+
+#----------------------------------------------------
+# SC's code 
+#----------------------------------------------------
+
+# For convenience (you may use createDataPartition from dplyr instead):
+#   this generates index 0 with 100p% of n
+#                  index 1 with 100(1-p)% of n
+  defineTrain = function(n,p){
+                        choice1 = runif(n,0,1)
+                        choice2 = rep(0, n)
+                        choice2[choice1>p] = 1
+                        return(choice2)
+  }
+
+# standardize x and y
+    df.std.temp = apply(df[,-c(2,3,4)], 2, function(x) standardize(x))
+    df.std      = data.frame(QNP_obs = df.std.temp[,1], roi = df[,2], p.no. = df[,3], df.std.temp[,-1])
+    dim(df.std.temp); dim(df.std)  # 7610 x  978 , 980
+
+
+
+# initiate storage & set.seed
+          store.al = 
+          store.b  = 
+          store.R  = NULL
+          set.seed(825)
+
+# set up training/testingi data
+
+          training.samples = defineTrain(nrow(df),0.8)  # get 80% of df as training set
+          
+          train.data = df.std[training.samples==0,-1]; dim(train.data)   # train.data has X only, no y	# 6072 x 979 -- approx 80% of data
+          test.data  = df.std[training.samples==1,-1]; dim(test.data)    # test.data  has X only, no y	# 1538 x 979 -- approx 20% of data
+                                                                         # n=7610
+
+# check if any row of x has at least one missing value
+  sum(is.na(apply(df.std[,-c(1,2,3)], 1, sum)))  # 7610 -- all rows have at least one NA   -- you cannot use "na.action=na.omit"
+  sum(is.na(apply(    df[,-c(1,2,3)], 1, sum)))  #    0 -- hmm?
+
+  check.col.na = apply(df.std[,-c(2,3)], 2, sum); length(check.col.na); sum(is.na(check.col.na)) # 978 check!   19 - there are 19 such columns full of NA
+  df.std.na = df.std[,is.na(check.col.na)]; dim(df.std.na)  # 7610 x 19  check
+  names(df.std.na)		# 
+				#  [1] "bz_CPT_O_R_bz_r20"    "bz_CPT_P_L_bz_r10"    "bz_CS_S_L_bz_r20"    
+				#  [4] "bz_C_PHP_R_bz_r10"    "bz_C_PH_L_bz_r2"      "bz_CerebrA_55_bz_r10"
+				#  [7] "bz_CerebrA_56_bz_r7"  "bz_CerebrA_56_bz_r10" "bz_CerebrA_69_bz_r1" 
+				# [10] "bz_CerebrA_69_bz_r5"  "bz_CerebrA_69_bz_r7"  "bz_CerebrA_69_bz_r10"
+				# [13] "bz_CerebrA_96_bz_r20" "bz_CerebrA_98_bz_r10" "bz_F_L_bz_r7"        
+				# [16] "bz_F_L_bz_r10"        "var_CerebrA_36"       "var_CerebrA_70"      
+				# [19] "var_CerebrA_93"  
+  apply(df[,names(df.std.na)],2, sd)
+
+  df.std[1:30, c("p.no.", "roi", "bz_CPT_O_R_bz_r20","bz_CPT_P_L_bz_r10")]
+  df[1:30,c("p.no.", "roi", "bz_CPT_O_R_bz_r20","bz_CPT_P_L_bz_r10")]
+
+
+
+# build the model using the training set  # na.action = na.omit,
+          temp.y = df.std[training.samples==0,1]
+	  model <- train( temp.y ~., data = train.data, method = "glmnet", 
+           	          trControl = trainControl("cv", number = 10),
+                          tuneLength = 10, family="gaussian"
+	                )
+
+# Raghav's function copied here:
+          cv_results <- train(x = train.data,
+                              y = temp.y,
+                              trControl = outer_control,
+                              tuneGrid = hyper_grid,
+                              method = "glmnet",
+                              family = "gaussian",
+                              tuneLength = 10,
+                              verboseIter = TRUE,
+                              allowParallel = TRUE)
+
+# best tuning parameter
+	  model$bestTune   #    alpha     lambda	 #  0.5 0.1462544
+          store.al = rbind(store.al, model$bestTune)
+
+# coefficient of the final model. You need to specify the best lambda
+	  keep = coef(model$finalModel, model$bestTune$lambda)
+          keep0 = as.array(as.matrix(keep)); rownames(keep0) = NULL
+          store.b = cbind(store.b, keep0)	
+
+# make predictions on the test data
+	  predictions <- model %>% predict(test.data)
+		
+# model performance metrics
+	  keep1 = data.frame(
+		    RMSE    = RMSE( predictions, test.data[, 'QNP_obs']),
+		    Rsquare = R2(   predictions, test.data[, 'QNP_obs'])
+		  )					
+          store.R = rbind(store.R, keep1); keep1
+
+# store results
+          store.OUT = store.b
+          store.OUT[storeOUT != 0] = 1
+          write.csv(storeOUT, "storeOUT.csv",row.names=FALSE)
+
+
