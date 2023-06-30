@@ -1,5 +1,6 @@
 ## Lasso regression with cross validation to identify significant predictors for NPP pipeline
 # Y: quantitative tau pathology calculated over each of the 10 regions
+# this model is to check predictors with only the smallest buffer zone radii
 # R:4.3.1
 
 library(glmnet) #V:4.1-7
@@ -27,6 +28,7 @@ dim(df_y)	#7610 1
 
 length(unique(df_x[,'roi']))
 length(unique(df_x[,'p.no.']))
+
 
 # prepare group variables for predictors
   df_x$roi   <- as.factor(df_x$roi )  ; class(df_x$roi )
@@ -63,14 +65,19 @@ length(unique(df_x[,'p.no.']))
     df.std      = data.frame(QNP_obs = df.std.temp[,1], roi = df[,2], p.no. = df[,3], df.std.temp[,-1])
     dim(df.std.temp); dim(df.std)  # 7610 x  929 , 931
 
+#Subset for only bz_r1
+    list.cols <- names(df_x)
+    list.cols.kp <- list.cols[!grepl("r2|r5|r7|r10|r12.5|r15|r20|r25|r30|r40", list.cols)]
+    df.std.bzr1 <- data.frame(QNP_obs = df.std.temp[,1],(df.std[,colnames(df.std) %in% list.cols.kp]))
+    
 # set up training/testing data
     training.samples = defineTrain(nrow(df),0.8)  # get 80% of df as training set # n=7610
-    train.data = df.std[training.samples==0,]; dim(train.data)
-    test.data  = df.std[training.samples==1,]; dim(test.data)
+    train.data = df.std.bzr1[training.samples==0,]; dim(train.data)
+    test.data  = df.std.bzr1[training.samples==1,]; dim(test.data)
     
 # check if any row of x has at least one missing value
-  sum(is.na(apply(df.std[,-c(2,3)], 1, sum)))  # 0
-  check.col.na = apply(df.std[,-c(2,3)], 2, sum); length(check.col.na); sum(is.na(check.col.na)) # 928 check!   0
+  sum(is.na(apply(df.std.bzr1[,-c(2,3)], 1, sum)))  # 0
+  check.col.na = apply(df.std.bzr1[,-c(2,3)], 2, sum); length(check.col.na); sum(is.na(check.col.na)) # 940 check!   0
 
 # build the model using the training set
 	model <- train( QNP_obs ~ ., data = train.data, method = "glmnet", 
@@ -105,7 +112,7 @@ length(unique(df_x[,'p.no.']))
 	  sum(is.na(keep[,1]))	# [1] 0
 	  sum(abs(keep[,1])>0.01)	# [1] 743 (SC:773)
 	  
-	  keep.select = keep[ abs(keep[,1]) > 0.025,1]  # <<< need ,1 ow. just numerics
+	  keep.select = keep[ abs(keep[,1]) > 0.0267,1]  # <<< need ,1 ow. just numerics
 	  dim(keep.select)	# null
 	  length(keep.select)     # 743
 	  list1 = names(keep.select)      # this returns significant ROI names as well as some p.no.
@@ -113,7 +120,6 @@ length(unique(df_x[,'p.no.']))
 
  # significant ROIs
 	  names(list2)
-	  capture.output(names(list2), file = "sig_cov_1.txt")
 	  
  # Plot the predicted values from the nested cross-validation model compared with original values
 	  
@@ -142,68 +148,3 @@ length(unique(df_x[,'p.no.']))
 	         col = my_palette,  pch = 20, cex = 1)
 	  abline(0, 0, col = "red")
 	  
-	  
-######## Second iteration for significant predictor extraction ###########
-	
-	#prepare input data
-	sig.cov.rm <- c("roiCA3","roiCA4","bz_CerebrA_18_bz_r7","bz_CerebrA_5_bz_r2","bz_Yeo2011_9_bz_r10",
-	                "bz_Yeo2011_9_bz_r12.5", "bz_Yeo2011_9_bz_r15", "bz_Yeo2011_9_bz_r20",
-	                "bz_Yeo2011_9_bz_r25", "bz_Yeo2011_9_bz_r30","bz_Yeo2011_9_bz_r40",
-	                "bz_vesRad_thr_0.7_bz_r30", "bz_vesRad_thr_0.7_bz_r40")
-	sig.cov1 = names(list2)[!(names(list2) %in% sig.cov.rm)]
-	
-  length(sig.cov1) #23
-  sig.cov1
-  df_x.next <- df.std[,colnames(df.std) %in% sig.cov1] 
-  df.next <- data.frame(QNP_obs = df.std$QNP_obs, df_x.next)
-	  
-  # set up training/testing data
-  training.samples.next = defineTrain(nrow(df),0.8)  # get 80% of df as training set # n=7610
-  train.data.next = df.next[training.samples==0,]; dim(train.data.next)
-  test.data.next  = df.next[training.samples==1,]; dim(test.data.next)
-  
-  # check if any row of x has at least one missing value
-  sum(is.na(apply(df.next[,-c(2,3)], 1, sum)))  # 0
-  check.col.na = apply(df.next[,-c(2,3)], 2, sum); length(check.col.na); sum(is.na(check.col.na)) # 22 check!   0
-  
-  # build the model using the training set
-  model.next <- train( QNP_obs ~ ., data = train.data.next, method = "glmnet", 
-                  trControl = trainControl("cv", number = 10),
-                  tuneLength = 10, family="gaussian", 
-                  VerboseIter = TRUE, allowParallel = TRUE, trace.it = TRUE
-  )
-  
-# best tuning parameter
-  best.lambda.next = model.next$bestTune$lambda # 0.00859
-  best.alpha.next  = model.next$bestTune$alpha  # 0.1
-  
-# coefficient of the final model. You need to specify the best lambda
-  keep.next = coef(model.next$finalModel, s = best.lambda.next)
-  keep.data.next = as.data.frame(summary(keep.next))
-  keep.name.next = row.names(keep.next)
-  pred_coef.next <- keep.name.next[keep.data.next[-1,1]]
-  keep0.next = as.array(as.matrix(keep.next)); rownames(keep0.next) = NULL
-  
-# make predictions on the test data
-  predictions.next <- model.next %>% predict(test.data.next)
-  
-# model performance metrics
-  keep1.next = data.frame(
-    RMSE.next   = RMSE( predictions, test.data.next[, 'QNP_obs']),
-    Rsquare.next = R2(   predictions, test.data.next[, 'QNP_obs'])
-  )	
-  keep1.next #       RMSE   Rsquare
-  #1 0.4466176 0.8098096
-  
-  #	  Identify significant predictors
-  sum(is.na(keep.next[,1]))	# [1] 0
-  sum(abs(keep.next[,1])>0.01)	# [1] 23
-  
-  keep.select.next = keep.next[ abs(keep.next[,1]) > 0.045,1]  # <<< need ,1 ow. just numerics
-  dim(keep.select.next)	# null
-  length(keep.select.next)     # 
-  list1.next = names(keep.select.next)      # this returns significant ROI names as well as some p.no.
-  length(list1.next) # [1] 32
-  
-  # significant ROIs
-  list1.next
