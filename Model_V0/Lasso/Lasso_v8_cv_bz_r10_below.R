@@ -1,15 +1,13 @@
-## Lasso regression with cross validation to identify significant predictors for NPP pipeline
+## Elastic net regression to identify significant predictors for NPP pipeline
 # Y: quantitative tau pathology calculated over each of the 10 regions
 # this model is to check predictors with only the small buffer zone radii, <=r10
 # R:4.3.1
 
 library(glmnet) #V:4.1-7
-library('Rcpp') #V:1.0.10
-#library("mice")
-#library("Hmisc")
-#library('lattice')
-library('caret') #V:6.0-94
-library('dplyr') #V:1.1.2
+library(Rcpp) #V:1.0.10
+library(caret) #V:6.0-94
+library(dplyr) #V:1.1.2
+library(dotwhisker) #V:0.7.4
 
 ## Data prep ##
 
@@ -26,16 +24,16 @@ names(df_y)
 dim(df_x)	#7610 930
 dim(df_y)	#7610 1
 
-length(unique(df_x[,'roi']))
-length(unique(df_x[,'p.no.']))
+length(unique(df_x[,'roi'])) # 10
+length(unique(df_x[,'p.no.'])) # 761
 
 
 # prepare group variables for predictors
-  df_x$roi   <- as.factor(df_x$roi )  ; class(df_x$roi )
-  df_x$p.no. <- as.factor(df_x$p.no.) ; class(df_x$p.no.)
+  df_x$roi   <- as.factor(df_x$roi )  ; class(df_x$roi ) #"factor"
+  df_x$p.no. <- as.factor(df_x$p.no.) ; class(df_x$p.no.)#"factor"
 
 # put x and y together
-  df <- data.frame(QNP_obs = df_y, df_x)	# put x and y together, excluding their first columns, skipping creating x and y
+  df <- data.frame(QNP_obs = df_y, df_x)
 	# check column names:
 	dim(df) #  7610  931
 	head(names(df))
@@ -65,19 +63,20 @@ length(unique(df_x[,'p.no.']))
     df.std      = data.frame(QNP_obs = df.std.temp[,1], roi = df[,2], p.no. = df[,3], df.std.temp[,-1])
     dim(df.std.temp); dim(df.std)  # 7610 x  929 , 931
 
-#Subset for only bz_r1
+#Subset for only bz_r10 and below radii
     list.cols <- names(df_x)
     list.cols.kp <- list.cols[!grepl("r12.5|r15|r20|r25|r30|r40", list.cols)]
-    df.std.bzr1 <- data.frame(QNP_obs = df.std.temp[,1],(df.std[,colnames(df.std) %in% list.cols.kp]))
+    df.std.bzr10 <- data.frame(QNP_obs = df.std.temp[,1],(df.std[,colnames(df.std) %in% list.cols.kp]))
+    dim(df.std.bzr10) #7610  664
     
 # set up training/testing data
     training.samples = defineTrain(nrow(df),0.8)  # get 80% of df as training set # n=7610
-    train.data = df.std.bzr1[training.samples==0,]; dim(train.data)
-    test.data  = df.std.bzr1[training.samples==1,]; dim(test.data)
+    train.data = df.std.bzr10[training.samples==0,]; dim(train.data) # 6072  664
+    test.data  = df.std.bzr10[training.samples==1,]; dim(test.data) # 1538  664
     
 # check if any row of x has at least one missing value
   sum(is.na(apply(df.std.bzr1[,-c(2,3)], 1, sum)))  # 0
-  check.col.na = apply(df.std.bzr1[,-c(2,3)], 2, sum); length(check.col.na); sum(is.na(check.col.na)) # 940 check!   0
+  check.col.na = apply(df.std.bzr1[,-c(2,3)], 2, sum); length(check.col.na); sum(is.na(check.col.na)) # 662 check!   0
 
 # build the model using the training set
 	model <- train( QNP_obs ~ ., data = train.data, method = "glmnet", 
@@ -87,8 +86,8 @@ length(unique(df_x[,'p.no.']))
 	                )
 
 # best tuning parameter
-    best.lambda = model$bestTune$lambda # # 0.00859
-    best.alpha  = model$bestTune$alpha  # 0.1
+    best.lambda = model$bestTune$lambda # 0.00352
+    best.alpha  = model$bestTune$alpha  # 0.4
 
 # coefficient of the final model. You need to specify the best lambda
 	  keep = coef(model$finalModel, s = best.lambda)
@@ -106,20 +105,43 @@ length(unique(df_x[,'p.no.']))
 		    Rsquare = R2(   predictions, test.data[, 'QNP_obs'])
 		  )	
 	  keep1 #       RMSE   Rsquare
-    #1 0.4466176 0.8098096
+    # 0.4465769 0.8098312
 	  
 #	  Identify significant predictors
-	  sum(is.na(keep[,1]))	# [1] 0
-	  sum(abs(keep[,1])>0.01)	# [1] 743 (SC:773)
+	  sum(is.na(keep[,1]))	# 0
+	  sum(abs(keep[,1])>0.01)	# 741
 	  
-	  keep.select = keep[ abs(keep[,1]) > 0.03,1]  # <<< need ,1 ow. just numerics
+	  keep.select = keep[ abs(keep[,1]) > 0.029,1]  # <<< thr = 0.029
 	  dim(keep.select)	# null
-	  length(keep.select)     # 743
+	  length(keep.select)     # 710
 	  list1 = names(keep.select)      # this returns significant ROI names as well as some p.no.
-	  list2 = keep.select[!grepl("p.no.", list1)]; length(list2) # [1] 26 (SC:36)
+	  list2 = keep.select[!grepl("p.no.", list1)]; length(list2) # 12
+	  names(list2)
 
  # significant ROIs
-	  names(list2)
+	  #Manual removal of bz predictors with larger radius if more than one is picked
+	  list.sp <- list2[names(list2) != "bz_Yeo2011_9_bz_r10"]
+	  names(list.sp)
+	  
+	  # [1] "roiCA4"                "bz_CerebrA_18_bz_r5"   "bz_CerebrA_5_bz_r1"    "bz_MdLF_R_bz_r10"     
+	  # [5] "bz_Yeo2011_9_bz_r7"    "edt_dxFrom_CerebrA_15" "edt_dxFrom_CerebrA_60" "edt_dxFrom_CerebrA_82"
+	  # [9] "edt_dxFrom_Yeo2011_10" "edt_dxFrom_Yeo2011_3"  "var_CerebrA_5" 
+
+
+# Subset for lm model
+    df.std.lm <- data.frame(QNP_obs = df.std.temp[,1],(df.std[,colnames(df.std) %in% names(list.sp)]))
+
+# Lm model with only significant predictors
+	model.lm.r10 <- lm(QNP_obs ~ ., data = df.std.lm)
+	summary(model.lm.r10)
+	lm(data.frame(scale(model.lm.r10$model)))
+
+  dwplot(model.lm.r10, dot_args = list(size = 3, pch = 21, fill = "white")) +
+    theme_grey(base_size =20) +
+    theme(aspect.ratio = 1, legend.position ="none") +
+    ylab("Significant predictors") + xlab("Coeffecient values") +
+    geom_vline(xintercept = 0, colour = "black", linetype = 2) +
+    ggtitle("R10 model")
 	  
  # Plot the predicted values from the nested cross-validation model compared with original values
 	  
