@@ -1,0 +1,250 @@
+---
+title: "V1_NPP_scaling_plots_1216"
+author: "RaghavMadan"
+date: "2024-12-16"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{r}
+library(ggplot2)
+library(reshape2)
+library(corrplot)
+library(ggdendro)
+library(Matrix)
+source("http://www.sthda.com/upload/rquery_cormat.r")
+library(reshape2)
+```
+
+```{r}
+RNGkind(kind = "Mersenne-Twister")
+set.seed(1234)
+
+setwd("~/Desktop/NeuroPathPredict/V1/Model_V1/Input_data")
+df_in<- read.csv("XY_MFG_V1_right_std_1021.csv") #(with standardized variables)
+df<- read.csv("XY_MFG_V1_right_0918.csv") #(before standardization)
+
+# Create a list of all column names and their indices
+column_names_indices <- data.frame(Index = 1:ncol(df), ColumnName = colnames(df))
+print(column_names_indices)
+
+# Retrieve the names from the text file
+list_SP_30 <- readLines("EN1_SigPred_30.txt")
+
+# Subset the data frame to include only the significant predictors
+df_list_30 <- df_in[, colnames(df_in) %in% list_SP_30]
+df_SP_30 <- data.frame(QNP_obs = df_in$QNP_obs, df_list_30)
+```
+
+```{r cars}
+# heatmap and correlation matrix, all together for 30 SP selected via Elastic net
+rquery.cormat(df_list_30, graphType="heatmap")
+```
+
+## Including Plots
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r pressure, echo=FALSE}
+# q-q plots for 30 significant predictors selected via elastic net
+for (variable in colnames(df_list_30)) {
+  print(summary(df[[variable]]))
+  p <- ggplot(df, aes(sample = df[[variable]])) +
+    stat_qq(aes(sample = df[[variable]])) +
+    stat_qq_line(aes(sample = df[[variable]])) +
+    labs(title = paste("Q-Q Plot of", variable, "vs QNP_obs"),
+         x = "Theoretical Quantiles",
+         y = "Sample Quantiles") +
+    theme_minimal()
+  
+  print(p)
+}
+```
+
+```{r pressure, echo=FALSE}
+## qq plot of QNP.obs (log)
+log.QNP <- log(df$AT8.intensity,)
+
+p <- ggplot(df, aes(sample = log.QNP)) +
+  stat_qq(aes(sample = log.QNP)) +
+  stat_qq_line(aes(sample = log.QNP)) +
+  labs(title = paste("Q-Q Plot of log QNP_obs"),
+       x = "Theoretical Quantiles",
+       y = "Sample Quantiles") +
+  theme_minimal()
+  
+print(p)
+
+```
+
+```{r pressure, echo=FALSE}
+## qq plot of Z scored QNP
+
+par(mfrow = c(1, 1))
+qqnorm(df_SP_30$QNP_obs, main = "QQ Plot After Z-scale Transformation")
+qqline(df_SP_30$QNP_obs)
+
+```
+
+```{r}
+## Check different data transformation options
+QNP.log <- log(df["AT8.intensity"])
+QNP.cbrt <- (df["AT8.intensity"])**(1/3)
+QNP.cbrt.log <- log((df["AT8.intensity"])**(1/3))
+```
+
+```{r}
+# Create a histogram for QNP_obs
+ggplot(df, aes(x = AT8.intensity)) +
+  geom_histogram(binwidth = 0.1, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of QNP_obs", x = "QNP_obs", y = "Frequency") +
+  theme_minimal()
+
+# Create a histogram for log QNP_obs
+ggplot(QNP.log, aes(x = AT8.intensity)) +
+  geom_histogram(binwidth = 0.1, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of log QNP_obs", x = " log QNP_obs", y = "Frequency") +
+  theme_minimal()
+
+# Create a histogram for QNP_obs cbrt
+ggplot(QNP.cbrt, aes(x = AT8.intensity)) +
+  geom_histogram(binwidth = 0.1, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of QNP_obs cbrt", x = "QNP_obs", y = "Frequency") +
+  theme_minimal()
+
+# Create a histogram for log QNP_obs cbrt
+ggplot(QNP.cbrt.log, aes(x = AT8.intensity)) +
+  geom_histogram(binwidth = 0.1, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of log of QNP_obs cbrt", x = "QNP_obs", y = "Frequency") +
+  theme_minimal()
+```
+
+```{r}
+## Plotting distribution for random 10 BZ variables + transformations
+index = c(5, 20, 37, 52, 77, 92, 118, 134, 155, 170)
+
+# Loop through each variable, perform Box-Cox transformation, and plot histogram
+for (i in index) {
+  # Ensure the response variable is positive by adding a small constant
+  df[[i]] <- df[[i]] + 1e-6
+  
+  # Perform Box-Cox transformation
+  var.bc <- boxcox(df[[i]] ~ 1, lambda = seq(-2, 2, 0.1))
+  lambda <- var.bc$x[which.max(var.bc$y)]
+  df[[paste0(colnames(df)[i], "_bc")]] <- (df[[i]]^lambda - 1) / lambda
+  
+  # Plot histogram of the transformed variable
+  h.bz <- ggplot(df, aes(x = df[[paste0(colnames(df)[i], "_bc")]])) +
+    geom_histogram(binwidth = 0.02, fill = "blue", color = "black", alpha = 0.7) +
+    labs(title = paste("Histogram of Box-Cox Transformed", colnames(df)[i]), 
+         x = paste("Transformed", colnames(df)[i]), y = "Frequency") +
+    theme_minimal()
+  print(h.bz)
+}
+```
+
+```{r}
+## Plotting distribution for random 10 BZ variables
+index = list(5,20,37,52,77,92,118,134,155,170)
+
+for (index in index) {
+  print(colnames(df[index]))
+  h.bz <- ggplot(df, aes(x = (df[[index]]))) +
+    geom_histogram(binwidth = 0.02, fill = "blue", color = "black", alpha = 0.7) +
+    labs(title = paste("Histogram of", colnames(df[index]), x = colnames(df[index]), y = "Frequency")) +
+    theme_minimal()
+  print(h.bz)
+}
+```
+
+```{r}
+## Plotting distribution for random 10 BZ variables
+index = list(5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20)
+
+for (index in index) {
+  print(colnames(df[index]))
+  h.bz <- ggplot(df, aes(x = (df[[index]]))) +
+    geom_histogram(binwidth = 0.02, fill = "blue", color = "black", alpha = 0.7) +
+    labs(title = paste("Histogram of", colnames(df[index]), x = colnames(df[index]), y = "Frequency")) +
+    theme_minimal()
+  print(h.bz)
+}
+```
+
+
+```{r}
+## Plotting distribution for random 10 BZ variables that have been z-scaled
+index = list(3,18,35,50,75,90,116,132,153,168)
+
+for (index in index) {
+  print(colnames(df_in[index]))
+  h.bz <- ggplot(df_in, aes(x = df_in[[index]])) +
+    geom_histogram(binwidth = 0.02, fill = "blue", color = "black", alpha = 0.7) +
+    labs(title = paste("Histogram of", colnames(df_in[index]), x = colnames(df_in[index]), y = "Frequency")) +
+    theme_minimal()
+  print(h.bz)
+}
+```
+
+```{r}
+## Plotting distribution for random 10 EDT variables
+index = list(189,205,237,252,277,292,318,334,355,411)
+
+for (index in index) {
+  print(colnames(df[index]))
+  h.edt <- ggplot(df, aes(x = df[[index]])) +
+    geom_histogram(binwidth = 0.02, fill = "blue", color = "black", alpha = 0.7) +
+    labs(title = paste("Histogram of", colnames(df[index]), x = colnames(df[index]), y = "Frequency")) +
+    theme_minimal()
+  print(h.edt)
+}
+```
+
+```{r}
+## Plotting distribution for random 10 EDT variables z-scaled
+index = list(187,203,235,250,275,290,316,332,353,409)
+
+for (index in index) {
+  print(colnames(df_in[index]))
+  h.edt <- ggplot(df_in, aes(x = df_in[[index]])) +
+    geom_histogram(binwidth = 0.02, fill = "blue", color = "black", alpha = 0.7) +
+    labs(title = paste("Histogram of", colnames(df_in[index]), x = colnames(df_in[index]), y = "Frequency")) +
+    theme_minimal()
+  print(h.edt)
+}
+```
+
+```{r}
+## Plotting distribution for random 5 Var variables
+index = list(420,425,437,442,452)
+
+for (index in index) {
+  print(colnames(df[index]))
+  h.var <- ggplot(df, aes(x = df[[index]])) +
+    geom_histogram(binwidth = 0.02, fill = "blue", color = "black", alpha = 0.7) +
+    labs(title = paste("Histogram of", colnames(df[index]), x = colnames(df[index]), y = "Frequency")) +
+    theme_minimal()
+  print(h.var)
+}
+```
+
+```{r}
+## Plotting distribution for random 5 Var variables z-scaled
+index = list(418,423,435,440,450)
+
+for (index in index) {
+  print(colnames(df_in[index]))
+  h.var <- ggplot(df_in, aes(x = df_in[[index]])) +
+    geom_histogram(binwidth = 0.02, fill = "blue", color = "black", alpha = 0.7) +
+    labs(title = paste("Histogram of", colnames(df_in[index]), x = colnames(df_in[index]), y = "Frequency")) +
+    theme_minimal()
+  print(h.var)
+}
+```
