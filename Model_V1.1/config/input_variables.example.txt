@@ -1,0 +1,69 @@
+# Copy this file to input_variables.txt and adjust paths if needed.
+# All paths are relative to the project root (directory containing config/, scripts/, input/, output/).
+
+default:
+  input:
+    raw:
+      qnp_data: "input/raw/MFG_QNP_vox_index_combined.csv"
+      covariates: "input/raw/Cov_all_consolidated_MFG_v1.csv"
+
+  output:
+    base_dir: "output"
+    preprocessing: "preprocessing"
+    covariate_analysis: "covariate_analysis"
+    elastic_net: "elastic_net"
+    factor_analysis: "factor_analysis"
+    universal_kriging: "universal_kriging"
+
+  preprocessing:
+    min_voxels: 100
+    max_missing: 0.1
+    standardization: "zscore"
+    transformations:
+      BZ: "cbrt"
+      AT8_intensity: "log"
+      EDT: "none"
+      Var: "none"
+    exclude_cols: ["X", "Y", "Z", "sub.id"]
+
+  covariate_analysis:
+    transformations:
+      - "none"
+      - "log"
+      - "sqrt"
+      - "boxcox"
+    metrics:
+      - "skewness"
+      - "kurtosis"
+      - "shapiro"
+    threshold:
+      skewness: 0.5
+      kurtosis: 3.0
+      shapiro_p: 0.05
+
+  elastic_net:
+    alpha_grid: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    cv_folds: 10
+    n_repeats: 3
+    feature_importance: true
+    parallel: true
+    seed: 42
+
+  universal_kriging:
+    default_config:
+      enabled: false
+      include_spatial_coords: true
+      nmax: 200
+      nmin: 30
+      maxdist: 100
+      grid_size: 10
+      variogram_model: "Sph"
+      nugget: 0.1
+      psill: 0.8
+      range: 10.0
+      cutoff: 50
+      width: 2
+      plot_variogram: true
+      cv_folds: 5
+      n_splits: [16,32,64,100]
+    output_dir: "universal_kriging"

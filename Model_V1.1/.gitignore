@@ -1,0 +1,45 @@
+# R
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj.user
+
+# Pipeline output and logs
+output/
+*.log
+logs/
+
+# Input data (do not commit large or sensitive files)
+input/raw/*.csv
+input/raw/*.nii
+input/raw/*.nii.gz
+input/processed/*.csv
+input/processed/*.nii
+input/processed/*.nii.gz
+
+# Local config (users copy from .example and edit; do not commit real subject IDs/paths)
+config/input_variables.txt
+config/subject_list.txt
+
+# Backup and temporary files
+scripts/delete later/
+scripts/*.R.txt
+Backup_bestversion scripts/
+*~
+*.tmp
+*.temp
+*.bak
+
+# OS and IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
